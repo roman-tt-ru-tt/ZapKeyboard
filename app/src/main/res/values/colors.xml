@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="zap_bg">#1A0B2E</color>
+    <color name="zap_panel">#2D1B4E</color>
+    <color name="zap_primary">#7C3AED</color>
+    <color name="zap_accent">#A78BFA</color>
+    <color name="zap_text">#FFFFFFFF</color>
+    <color name="zap_text_secondary">#C4B5FD</color>
+    <color name="zap_danger">#DC2626</color>
+    <color name="zap_ok">#10B981</color>
+</resources>
