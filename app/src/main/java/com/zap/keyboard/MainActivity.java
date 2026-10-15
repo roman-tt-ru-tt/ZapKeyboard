@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -37,27 +36,22 @@ public class MainActivity extends Activity {
         Button btnEnable = findViewById(R.id.btnEnableKeyboard);
         Button btnSwitch = findViewById(R.id.btnSwitchKeyboard);
 
-        btnAdd.setOnClickListener(v -> showAddDialog());
-
+        btnAdd.setOnClickListener(v -> showAddTemplateDialog());
         btnEnable.setOnClickListener(v -> {
             startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS));
-            Toast.makeText(this,
-                    "Выберите ZapKeyboard в списке",
+            Toast.makeText(this, "Выберите ZapKeyboard в списке",
                     Toast.LENGTH_LONG).show();
         });
-
         btnSwitch.setOnClickListener(v -> {
             try {
                 InputMethodManager imm = (InputMethodManager)
                         getSystemService(INPUT_METHOD_SERVICE);
                 if (imm != null) {
                     imm.showInputMethodPicker();
-                    Toast.makeText(this,
-                            "Выберите ZapKeyboard",
+                    Toast.makeText(this, "Выберите ZapKeyboard",
                             Toast.LENGTH_LONG).show();
                 } else {
-                    startActivity(new Intent(
-                            Settings.ACTION_INPUT_METHOD_SETTINGS));
+                    startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS));
                 }
             } catch (Exception e) {
                 Toast.makeText(this, "Ошибка: " + e.getMessage(),
@@ -72,11 +66,13 @@ public class MainActivity extends Activity {
         refreshList();
     }
 
+    // ==================== СПИСОК ШАБЛОНОВ ====================
+
     private void refreshList() {
         listContainer.removeAllViews();
-        List<ZapManager.ZapItem> items = ZapManager.getAll(this);
+        List<ZapManager.ZapTemplate> templates = ZapManager.getAll(this);
 
-        if (items.isEmpty()) {
+        if (templates.isEmpty()) {
             TextView empty = new TextView(this);
             empty.setText("Пока нет шаблонов.\nНажмите «+ Добавить шаблон»");
             empty.setTextColor(0xFFA78BFA);
@@ -87,7 +83,7 @@ public class MainActivity extends Activity {
             return;
         }
 
-        for (final ZapManager.ZapItem item : items) {
+        for (final ZapManager.ZapTemplate tpl : templates) {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
             card.setPadding(dpToPx(16), dpToPx(14), dpToPx(16), dpToPx(14));
@@ -104,44 +100,32 @@ public class MainActivity extends Activity {
             card.setBackground(bg);
 
             TextView name = new TextView(this);
-            name.setText(item.name);
+            name.setText("📄 " + tpl.name);
             name.setTextColor(0xFFFFFFFF);
-            name.setTextSize(16f);
+            name.setTextSize(17f);
             name.setTypeface(null, Typeface.BOLD);
             card.addView(name);
 
-            TextView text = new TextView(this);
-            String preview = item.text.length() > 120
-                    ? item.text.substring(0, 120) + "..."
-                    : item.text;
-            text.setText(preview);
-            text.setTextColor(0xFFC4B5FD);
-            text.setTextSize(13f);
-            text.setPadding(0, dpToPx(6), 0, dpToPx(8));
-            card.addView(text);
+            TextView count = new TextView(this);
+            count.setText("Строк: " + tpl.lines.size()
+                    + " / " + ZapManager.MAX_LINES_PER_TEMPLATE);
+            count.setTextColor(0xFFA78BFA);
+            count.setTextSize(12f);
+            count.setPadding(0, dpToPx(6), 0, dpToPx(8));
+            card.addView(count);
 
             LinearLayout btns = new LinearLayout(this);
             btns.setOrientation(LinearLayout.HORIZONTAL);
 
-            Button btnCopy = new Button(this);
-            btnCopy.setText("📋 Копировать");
-            btnCopy.setAllCaps(false);
-            btnCopy.setTextColor(0xFFFFFFFF);
-            btnCopy.setTextSize(12f);
-            btnCopy.setBackground(accentButton(0xFF7C3AED));
-            btnCopy.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-            btnCopy.setOnClickListener(v -> {
-                android.content.ClipboardManager cm =
-                        (android.content.ClipboardManager)
-                                getSystemService(CLIPBOARD_SERVICE);
-                if (cm != null) {
-                    cm.setPrimaryClip(android.content.ClipData.newPlainText(
-                            "Zap", item.text));
-                    Toast.makeText(MainActivity.this,
-                            "Скопировано в буфер", Toast.LENGTH_SHORT).show();
-                }
-            });
-            btns.addView(btnCopy);
+            Button btnEdit = new Button(this);
+            btnEdit.setText("✏️ Редактор строк");
+            btnEdit.setAllCaps(false);
+            btnEdit.setTextColor(0xFFFFFFFF);
+            btnEdit.setTextSize(12f);
+            btnEdit.setBackground(accentButton(0xFF7C3AED));
+            btnEdit.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            btnEdit.setOnClickListener(v -> showLinesEditor(tpl.name));
+            btns.addView(btnEdit);
 
             View sp = new View(this);
             sp.setLayoutParams(new LinearLayout.LayoutParams(dpToPx(6), -1));
@@ -155,12 +139,11 @@ public class MainActivity extends Activity {
             btnDelete.setBackground(accentButton(0xFFDC2626));
             btnDelete.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
             btnDelete.setOnClickListener(v -> {
-                new AlertDialog.Builder(MainActivity.this,
-                        R.style.ZapDialog)
-                        .setTitle("Удалить?")
-                        .setMessage("Убрать шаблон «" + item.name + "»?")
+                new AlertDialog.Builder(MainActivity.this, R.style.ZapDialog)
+                        .setTitle("Удалить шаблон?")
+                        .setMessage("Убрать «" + tpl.name + "» со всеми строками?")
                         .setPositiveButton("Удалить", (d, w) -> {
-                            ZapManager.remove(MainActivity.this, item.name);
+                            ZapManager.removeTemplate(MainActivity.this, tpl.name);
                             refreshList();
                         })
                         .setNegativeButton("Отмена", null)
@@ -173,17 +156,19 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void showAddDialog() {
+    // ==================== ДОБАВИТЬ ШАБЛОН ====================
+
+    private void showAddTemplateDialog() {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dpToPx(30), dpToPx(20), dpToPx(30), dpToPx(20));
 
-        TextView nameLabel = new TextView(this);
-        nameLabel.setText("Название");
-        nameLabel.setTextColor(0xFFFFFFFF);
-        nameLabel.setTextSize(14f);
-        nameLabel.setPadding(0, 0, 0, dpToPx(6));
-        layout.addView(nameLabel);
+        TextView label = new TextView(this);
+        label.setText("Название шаблона");
+        label.setTextColor(0xFFFFFFFF);
+        label.setTextSize(14f);
+        label.setPadding(0, 0, 0, dpToPx(6));
+        layout.addView(label);
 
         final EditText etName = new EditText(this);
         etName.setHint("Например: Привет");
@@ -194,53 +179,252 @@ public class MainActivity extends Activity {
         etName.setPadding(dpToPx(20), dpToPx(14), dpToPx(20), dpToPx(14));
         layout.addView(etName);
 
-        View sp1 = new View(this);
-        sp1.setLayoutParams(new LinearLayout.LayoutParams(-1, dpToPx(20)));
-        layout.addView(sp1);
-
-        TextView textLabel = new TextView(this);
-        textLabel.setText("Текст");
-        textLabel.setTextColor(0xFFFFFFFF);
-        textLabel.setTextSize(14f);
-        textLabel.setPadding(0, 0, 0, dpToPx(6));
-        layout.addView(textLabel);
-
-        final EditText etText = new EditText(this);
-        etText.setHint("Текст шаблона");
-        etText.setHintTextColor(0xFFA78BFA);
-        etText.setTextColor(0xFFFFFFFF);
-        etText.setInputType(InputType.TYPE_CLASS_TEXT
-                | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        etText.setLines(5);
-        etText.setGravity(Gravity.TOP | Gravity.START);
-        etText.setBackground(accentButton(0xFF2D1B4E));
-        etText.setPadding(dpToPx(20), dpToPx(14), dpToPx(20), dpToPx(14));
-        layout.addView(etText);
-
         new AlertDialog.Builder(this, R.style.ZapDialog)
                 .setTitle("Новый шаблон")
                 .setView(layout)
-                .setPositiveButton("Сохранить", (d, w) -> {
+                .setPositiveButton("Создать", (d, w) -> {
                     String name = etName.getText().toString().trim();
-                    String text = etText.getText().toString();
                     if (name.isEmpty()) {
                         Toast.makeText(this, "Введите название",
                                 Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    if (ZapManager.add(this, name, text)) {
-                        Toast.makeText(this, "✅ Добавлено",
+                    if (ZapManager.addTemplate(this, name)) {
+                        Toast.makeText(this, "✅ Шаблон создан",
                                 Toast.LENGTH_SHORT).show();
                         refreshList();
+                        // Сразу открываем редактор строк
+                        showLinesEditor(name);
                     } else {
-                        Toast.makeText(this,
-                                "Шаблон с таким именем уже есть",
+                        Toast.makeText(this, "Шаблон с таким именем уже есть",
                                 Toast.LENGTH_SHORT).show();
                     }
                 })
                 .setNegativeButton("Отмена", null)
                 .show();
     }
+
+    // ==================== РЕДАКТОР СТРОК ====================
+
+    private void showLinesEditor(final String templateName) {
+        ScrollView scroll = new ScrollView(this);
+        final LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(dpToPx(10), dpToPx(10), dpToPx(10), dpToPx(10));
+        scroll.addView(container);
+
+        // Диалог создадим заранее, чтобы обновлять содержимое
+        final AlertDialog dialog = new AlertDialog.Builder(this, R.style.ZapDialog)
+                .setTitle("Шаблон: " + templateName)
+                .setView(scroll)
+                .setNegativeButton("Закрыть", null)
+                .create();
+
+        Runnable refresh = new Runnable() {
+            @Override public void run() {
+                container.removeAllViews();
+
+                ZapManager.ZapTemplate tpl = ZapManager.findByName(
+                        MainActivity.this, templateName);
+                if (tpl == null) {
+                    dialog.dismiss();
+                    return;
+                }
+
+                // Счётчик
+                TextView counter = new TextView(MainActivity.this);
+                counter.setText("Строк: " + tpl.lines.size()
+                        + " / " + ZapManager.MAX_LINES_PER_TEMPLATE);
+                counter.setTextColor(0xFFA78BFA);
+                counter.setTextSize(13f);
+                counter.setPadding(0, 0, 0, dpToPx(10));
+                container.addView(counter);
+
+                // Кнопка "+ Добавить строку"
+                Button btnAddLine = new Button(MainActivity.this);
+                btnAddLine.setText("+ Добавить строку");
+                btnAddLine.setAllCaps(false);
+                btnAddLine.setTextColor(0xFFFFFFFF);
+                btnAddLine.setTextSize(14f);
+                btnAddLine.setBackground(accentButton(0xFF10B981));
+                LinearLayout.LayoutParams alLp =
+                        new LinearLayout.LayoutParams(-1, -2);
+                alLp.bottomMargin = dpToPx(12);
+                btnAddLine.setLayoutParams(alLp);
+                btnAddLine.setEnabled(
+                        tpl.lines.size() < ZapManager.MAX_LINES_PER_TEMPLATE);
+                btnAddLine.setOnClickListener(v -> {
+                    dialog.dismiss();
+                    showAddLineDialog(templateName);
+                });
+                container.addView(btnAddLine);
+
+                // Список строк
+                if (tpl.lines.isEmpty()) {
+                    TextView empty = new TextView(MainActivity.this);
+                    empty.setText("Пока нет строк.\nДобавьте первую строку.");
+                    empty.setTextColor(0xFFA78BFA);
+                    empty.setTextSize(13f);
+                    empty.setGravity(Gravity.CENTER);
+                    empty.setPadding(20, 40, 20, 40);
+                    container.addView(empty);
+                } else {
+                    for (int i = 0; i < tpl.lines.size(); i++) {
+                        final int index = i;
+                        final String line = tpl.lines.get(i);
+
+                        LinearLayout row = new LinearLayout(MainActivity.this);
+                        row.setOrientation(LinearLayout.HORIZONTAL);
+                        row.setBackground(accentButton(0xFF1A0B2E));
+                        row.setPadding(dpToPx(12), dpToPx(10),
+                                dpToPx(12), dpToPx(10));
+                        LinearLayout.LayoutParams rowLp =
+                                new LinearLayout.LayoutParams(-1, -2);
+                        rowLp.bottomMargin = dpToPx(6);
+                        row.setLayoutParams(rowLp);
+
+                        TextView num = new TextView(MainActivity.this);
+                        num.setText((i + 1) + ".");
+                        num.setTextColor(0xFFA78BFA);
+                        num.setTextSize(13f);
+                        num.setPadding(0, 0, dpToPx(10), 0);
+                        row.addView(num);
+
+                        TextView text = new TextView(MainActivity.this);
+                        text.setText(line);
+                        text.setTextColor(0xFFFFFFFF);
+                        text.setTextSize(13f);
+                        text.setLayoutParams(new LinearLayout.LayoutParams(
+                                0, -2, 1f));
+                        row.addView(text);
+
+                        Button btnEdit = new Button(MainActivity.this);
+                        btnEdit.setText("✏️");
+                        btnEdit.setAllCaps(false);
+                        btnEdit.setTextColor(0xFFFFFFFF);
+                        btnEdit.setBackground(accentButton(0xFF7C3AED));
+                        btnEdit.setLayoutParams(new LinearLayout.LayoutParams(
+                                dpToPx(44), dpToPx(44)));
+                        btnEdit.setOnClickListener(v -> {
+                            dialog.dismiss();
+                            showEditLineDialog(templateName, index, line);
+                        });
+                        row.addView(btnEdit);
+
+                        View sp = new View(MainActivity.this);
+                        sp.setLayoutParams(new LinearLayout.LayoutParams(
+                                dpToPx(4), -1));
+                        row.addView(sp);
+
+                        Button btnDel = new Button(MainActivity.this);
+                        btnDel.setText("🗑");
+                        btnDel.setAllCaps(false);
+                        btnDel.setTextColor(0xFFFFFFFF);
+                        btnDel.setBackground(accentButton(0xFFDC2626));
+                        btnDel.setLayoutParams(new LinearLayout.LayoutParams(
+                                dpToPx(44), dpToPx(44)));
+                        btnDel.setOnClickListener(v -> {
+                            ZapManager.removeLine(
+                                    MainActivity.this, templateName, index);
+                            refreshList();
+                            refresh.run();
+                        });
+                        row.addView(btnDel);
+
+                        container.addView(row);
+                    }
+                }
+            }
+        };
+        refresh.run();
+        dialog.setOnDismissListener(d -> refreshList());
+        dialog.show();
+    }
+
+    // ==================== ДОБАВИТЬ СТРОКУ ====================
+
+    private void showAddLineDialog(final String templateName) {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dpToPx(30), dpToPx(20), dpToPx(30), dpToPx(20));
+
+        final EditText et = new EditText(this);
+        et.setHint("Текст строки");
+        et.setHintTextColor(0xFFA78BFA);
+        et.setTextColor(0xFFFFFFFF);
+        et.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        et.setLines(3);
+        et.setGravity(Gravity.TOP | Gravity.START);
+        et.setBackground(accentButton(0xFF2D1B4E));
+        et.setPadding(dpToPx(20), dpToPx(14), dpToPx(20), dpToPx(14));
+        layout.addView(et);
+
+        new AlertDialog.Builder(this, R.style.ZapDialog)
+                .setTitle("Новая строка")
+                .setView(layout)
+                .setPositiveButton("Сохранить", (d, w) -> {
+                    String text = et.getText().toString().trim();
+                    if (text.isEmpty()) {
+                        Toast.makeText(this, "Введите текст",
+                                Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (ZapManager.addLine(this, templateName, text)) {
+                        refreshList();
+                        showLinesEditor(templateName);
+                    } else {
+                        Toast.makeText(this,
+                                "Не удалось добавить (лимит "
+                                        + ZapManager.MAX_LINES_PER_TEMPLATE + ")?",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("Отмена", (d, w) -> showLinesEditor(templateName))
+                .show();
+    }
+
+    // ==================== РЕДАКТИРОВАТЬ СТРОКУ ====================
+
+    private void showEditLineDialog(final String templateName,
+                                    final int index,
+                                    String currentText) {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dpToPx(30), dpToPx(20), dpToPx(30), dpToPx(20));
+
+        final EditText et = new EditText(this);
+        et.setText(currentText);
+        et.setHintTextColor(0xFFA78BFA);
+        et.setTextColor(0xFFFFFFFF);
+        et.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        et.setLines(3);
+        et.setGravity(Gravity.TOP | Gravity.START);
+        et.setBackground(accentButton(0xFF2D1B4E));
+        et.setPadding(dpToPx(20), dpToPx(14), dpToPx(20), dpToPx(14));
+        layout.addView(et);
+
+        new AlertDialog.Builder(this, R.style.ZapDialog)
+                .setTitle("Редактировать строку " + (index + 1))
+                .setView(layout)
+                .setPositiveButton("Сохранить", (d, w) -> {
+                    String text = et.getText().toString().trim();
+                    if (text.isEmpty()) {
+                        Toast.makeText(this, "Введите текст",
+                                Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (ZapManager.updateLine(this, templateName, index, text)) {
+                        refreshList();
+                        showLinesEditor(templateName);
+                    }
+                })
+                .setNegativeButton("Отмена", (d, w) -> showLinesEditor(templateName))
+                .show();
+    }
+
+    // ==================== ВСПОМОГАТЕЛЬНОЕ ====================
 
     private android.graphics.drawable.StateListDrawable accentButton(int color) {
         android.graphics.drawable.StateListDrawable sld =
@@ -276,4 +460,4 @@ public class MainActivity extends Activity {
                 android.util.TypedValue.COMPLEX_UNIT_DIP, dp,
                 getResources().getDisplayMetrics());
     }
-        }
+    }
