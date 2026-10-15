@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/zap_bg</item>
+        <item name="android:colorPrimary">@color/zap_primary</item>
+        <item name="android:colorPrimaryDark">@color/zap_bg</item>
+        <item name="android:colorAccent">@color/zap_accent</item>
+        <item name="android:statusBarColor">@color/zap_bg</item>
+        <item name="android:navigationBarColor">@color/zap_bg</item>
+        <item name="android:textColorPrimary">@color/zap_text</item>
+        <item name="android:textColorSecondary">@color/zap_text_secondary</item>
+    </style>
+
+    <style name="ZapDialog" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:textColorPrimary">@color/zap_text</item>
+        <item name="android:textColorSecondary">@color/zap_text_secondary</item>
+        <item name="android:colorAccent">@color/zap_accent</item>
+    </style>
+</resources>
