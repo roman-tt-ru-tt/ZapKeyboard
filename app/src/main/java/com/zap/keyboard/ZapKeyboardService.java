@@ -1,9 +1,10 @@
 package com.zap.keyboard;
 
 import android.inputmethodservice.InputMethodService;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -15,136 +16,275 @@ import java.util.List;
 public class ZapKeyboardService extends InputMethodService {
 
     private View keyboardView;
-    private LinearLayout templatesContainer;
+    private LinearLayout contentContainer;
 
     @Override
     public View onCreateInputView() {
         this.keyboardView = getLayoutInflater().inflate(R.layout.keyboard, null);
-        this.templatesContainer = keyboardView.findViewById(R.id.templatesContainer);
-        refreshTemplates();
-        buildKeys();
+        this.contentContainer = keyboardView.findViewById(R.id.contentContainer);
+        showKeyboardRoot();
         return keyboardView;
     }
 
     @Override
-    public void onStartInputView(android.view.inputmethod.EditorInfo info, boolean restarting) {
+    public void onStartInputView(EditorInfo info, boolean restarting) {
         super.onStartInputView(info, restarting);
-        refreshTemplates();
+        showKeyboardRoot();
     }
 
-    /** Перестроить список шаблонов Zap. */
-    private void refreshTemplates() {
-        if (templatesContainer == null) return;
-        templatesContainer.removeAllViews();
+    // ==================== ЭКРАН 1: КОРЕНЬ (ZAP) ====================
 
-        List<ZapManager.ZapItem> items = ZapManager.getAll(this);
-        if (items.isEmpty()) {
-            TextView empty = new TextView(this);
-            empty.setText("Нет шаблонов.\nДобавьте в приложении ZapKeyboard");
-            empty.setTextColor(0xFFA78BFA);
-            empty.setTextSize(13f);
-            empty.setGravity(Gravity.CENTER);
-            empty.setPadding(20, 30, 20, 30);
-            templatesContainer.addView(empty);
-            return;
-        }
+    private void showKeyboardRoot() {
+        if (contentContainer == null) return;
+        contentContainer.removeAllViews();
 
-        for (final ZapManager.ZapItem item : items) {
-            Button btn = new Button(this);
-            btn.setText(item.name);
-            btn.setAllCaps(false);
-            btn.setTextColor(0xFFFFFFFF);
-            btn.setTextSize(14f);
-            btn.setBackgroundResource(R.drawable.key_bg);
-            LinearLayout.LayoutParams lp =
-                    new LinearLayout.LayoutParams(-1, dpToPx(44));
-            lp.bottomMargin = dpToPx(6);
-            btn.setLayoutParams(lp);
-            btn.setOnClickListener(v -> insertZap(item.text));
-            templatesContainer.addView(btn);
-        }
-    }
+        // Заголовок
+        TextView title = new TextView(this);
+        title.setText("⚡ Zap");
+        title.setTextColor(0xFFFFFFFF);
+        title.setTextSize(18f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, dpToPx(14), 0, dpToPx(14));
+        contentContainer.addView(title);
 
-    /** Вставить текст шаблона в поле ввода. */
-    private void insertZap(String text) {
-        if (text == null) text = "";
-        InputConnection ic = getCurrentInputConnection();
-        if (ic != null) {
-            ic.commitText(text, 1);
-        }
-    }
+        // Кнопка "Открыть шаблоны"
+        Button btnOpen = new Button(this);
+        btnOpen.setText("📂 Открыть шаблоны");
+        btnOpen.setAllCaps(false);
+        btnOpen.setTextColor(0xFFFFFFFF);
+        btnOpen.setTextSize(16f);
+        btnOpen.setBackgroundResource(R.drawable.key_bg);
+        LinearLayout.LayoutParams lp =
+                new LinearLayout.LayoutParams(-1, dpToPx(56));
+        lp.setMargins(dpToPx(10), 0, dpToPx(10), dpToPx(10));
+        btnOpen.setLayoutParams(lp);
+        btnOpen.setOnClickListener(v -> showTemplatesList());
+        contentContainer.addView(btnOpen);
 
-    /** Обычные клавиши клавиатуры: QWERTY + цифры + пробел + backspace + enter. */
-    private void buildKeys() {
-        LinearLayout keysContainer = keyboardView.findViewById(R.id.keysContainer);
-        if (keysContainer == null) return;
-        keysContainer.removeAllViews();
+        // Подсказка
+        TextView hint = new TextView(this);
+        hint.setText("Нажмите на шаблон, потом на строку — она вставится в чат");
+        hint.setTextColor(0xFFA78BFA);
+        hint.setTextSize(12f);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(dpToPx(20), dpToPx(20), dpToPx(20), dpToPx(20));
+        contentContainer.addView(hint);
 
-        String[][] rows = {
-                {"q","w","e","r","t","y","u","i","o","p"},
-                {"a","s","d","f","g","h","j","k","l"},
-                {"⇧","z","x","c","v","b","n","m","⌫"},
-                {"123"," ","↵"}
-        };
+        // Обычные клавиши (опционально, простые: пробел + backspace + enter)
+        LinearLayout keysRow = new LinearLayout(this);
+        keysRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams krLp =
+                new LinearLayout.LayoutParams(-1, dpToPx(48));
+        krLp.setMargins(dpToPx(6), dpToPx(10), dpToPx(6), dpToPx(6));
+        keysRow.setLayoutParams(krLp);
 
-        for (String[] row : rows) {
-            LinearLayout rowLayout = new LinearLayout(this);
-            rowLayout.setOrientation(LinearLayout.HORIZONTAL);
-            LinearLayout.LayoutParams rowLp =
-                    new LinearLayout.LayoutParams(-1, dpToPx(48));
-            rowLayout.setLayoutParams(rowLp);
+        Button btnSpace = new Button(this);
+        btnSpace.setText("Пробел");
+        btnSpace.setAllCaps(false);
+        btnSpace.setTextColor(0xFFFFFFFF);
+        btnSpace.setTextSize(14f);
+        btnSpace.setBackgroundResource(R.drawable.key_bg);
+        btnSpace.setLayoutParams(new LinearLayout.LayoutParams(0, -1, 4f));
+        btnSpace.setOnClickListener(v -> {
+            InputConnection ic = getCurrentInputConnection();
+            if (ic != null) ic.commitText(" ", 1);
+        });
+        keysRow.addView(btnSpace);
 
-            for (String key : row) {
-                Button btn = new Button(this);
-                btn.setText(key);
-                btn.setAllCaps(false);
-                btn.setTextColor(0xFFFFFFFF);
-                btn.setTextSize(16f);
-                btn.setBackgroundResource(R.drawable.key_bg);
-                LinearLayout.LayoutParams kLp;
-                if (key.equals(" ")) kLp = new LinearLayout.LayoutParams(0, -1, 5f);
-                else if (key.equals("⇧") || key.equals("⌫")) kLp = new LinearLayout.LayoutParams(0, -1, 1.5f);
-                else kLp = new LinearLayout.LayoutParams(0, -1, 1f);
-                kLp.setMargins(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2));
-                btn.setLayoutParams(kLp);
-                btn.setOnClickListener(v -> handleKey(key));
-                rowLayout.addView(btn);
-            }
-            keysContainer.addView(rowLayout);
-        }
-    }
+        Button btnBack = new Button(this);
+        btnBack.setText("⌫");
+        btnBack.setAllCaps(false);
+        btnBack.setTextColor(0xFFFFFFFF);
+        btnBack.setTextSize(18f);
+        btnBack.setBackgroundResource(R.drawable.key_bg);
+        LinearLayout.LayoutParams bLp =
+                new LinearLayout.LayoutParams(0, -1, 1f);
+        bLp.leftMargin = dpToPx(4);
+        btnBack.setLayoutParams(bLp);
+        btnBack.setOnClickListener(v -> {
+            InputConnection ic = getCurrentInputConnection();
+            if (ic != null) ic.deleteSurroundingText(1, 0);
+        });
+        keysRow.addView(btnBack);
 
-    private void handleKey(String key) {
-        InputConnection ic = getCurrentInputConnection();
-        if (ic == null) return;
-
-        switch (key) {
-            case "⌫":
-                ic.deleteSurroundingText(1, 0);
-                break;
-            case "↵":
+        Button btnEnter = new Button(this);
+        btnEnter.setText("↵");
+        btnEnter.setAllCaps(false);
+        btnEnter.setTextColor(0xFFFFFFFF);
+        btnEnter.setTextSize(18f);
+        btnEnter.setBackgroundResource(R.drawable.key_bg);
+        LinearLayout.LayoutParams eLp =
+                new LinearLayout.LayoutParams(0, -1, 1.5f);
+        eLp.leftMargin = dpToPx(4);
+        btnEnter.setLayoutParams(eLp);
+        btnEnter.setOnClickListener(v -> {
+            InputConnection ic = getCurrentInputConnection();
+            if (ic != null) {
                 ic.sendKeyEvent(new android.view.KeyEvent(
                         android.view.KeyEvent.ACTION_DOWN,
                         android.view.KeyEvent.KEYCODE_ENTER));
                 ic.sendKeyEvent(new android.view.KeyEvent(
                         android.view.KeyEvent.ACTION_UP,
                         android.view.KeyEvent.KEYCODE_ENTER));
-                break;
-            case " ":
-                ic.commitText(" ", 1);
-                break;
-            case "⇧":
-            case "123":
-                // Пока не реализовано — оставим как заглушки
-                break;
-            default:
-                ic.commitText(key, 1);
-        }
+            }
+        });
+        keysRow.addView(btnEnter);
+
+        contentContainer.addView(keysRow);
     }
 
+    // ==================== ЭКРАН 2: СПИСОК ШАБЛОНОВ ====================
+
+    private void showTemplatesList() {
+        if (contentContainer == null) return;
+        contentContainer.removeAllViews();
+
+        // Заголовок
+        TextView title = new TextView(this);
+        title.setText("📂 Шаблоны");
+        title.setTextColor(0xFFFFFFFF);
+        title.setTextSize(16f);
+        title.setTypeface(null, android.util.TypedValue.COMPLEX_UNIT_DIP == 0 ?
+                null : android.graphics.Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, dpToPx(10), 0, dpToPx(10));
+        contentContainer.addView(title);
+
+        List<ZapManager.ZapTemplate> templates = ZapManager.getAll(this);
+
+        if (templates.isEmpty()) {
+            TextView empty = new TextView(this);
+            empty.setText("Нет шаблонов.\nДобавьте их в приложении ZapKeyboard");
+            empty.setTextColor(0xFFA78BFA);
+            empty.setTextSize(13f);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dpToPx(20), dpToPx(40), dpToPx(20), dpToPx(40));
+            contentContainer.addView(empty);
+        } else {
+            ScrollView scroll = new ScrollView(this);
+            scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+            LinearLayout list = new LinearLayout(this);
+            list.setOrientation(LinearLayout.VERTICAL);
+            list.setPadding(dpToPx(8), 0, dpToPx(8), dpToPx(8));
+            scroll.addView(list);
+
+            for (final ZapManager.ZapTemplate tpl : templates) {
+                Button btn = new Button(this);
+                btn.setText("📄 " + tpl.name
+                        + "  (" + tpl.lines.size() + ")");
+                btn.setAllCaps(false);
+                btn.setTextColor(0xFFFFFFFF);
+                btn.setTextSize(14f);
+                btn.setBackgroundResource(R.drawable.key_bg);
+                LinearLayout.LayoutParams lp =
+                        new LinearLayout.LayoutParams(-1, dpToPx(48));
+                lp.bottomMargin = dpToPx(6);
+                btn.setLayoutParams(lp);
+                btn.setOnClickListener(v -> showLinesList(tpl.name));
+                list.addView(btn);
+            }
+
+            contentContainer.addView(scroll);
+        }
+
+        // Назад
+        Button btnBack = new Button(this);
+        btnBack.setText("← Назад");
+        btnBack.setAllCaps(false);
+        btnBack.setTextColor(0xFFFFFFFF);
+        btnBack.setTextSize(14f);
+        btnBack.setBackgroundResource(R.drawable.key_bg);
+        LinearLayout.LayoutParams bLp =
+                new LinearLayout.LayoutParams(-1, dpToPx(44));
+        bLp.setMargins(dpToPx(8), dpToPx(6), dpToPx(8), dpToPx(6));
+        btnBack.setLayoutParams(bLp);
+        btnBack.setOnClickListener(v -> showKeyboardRoot());
+        contentContainer.addView(btnBack);
+    }
+
+    // ==================== ЭКРАН 3: СПИСОК СТРОК ====================
+
+    private void showLinesList(final String templateName) {
+        if (contentContainer == null) return;
+        contentContainer.removeAllViews();
+
+        // Заголовок
+        TextView title = new TextView(this);
+        title.setText("📄 " + templateName);
+        title.setTextColor(0xFFFFFFFF);
+        title.setTextSize(16f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, dpToPx(10), 0, dpToPx(10));
+        contentContainer.addView(title);
+
+        ZapManager.ZapTemplate tpl = ZapManager.findByName(this, templateName);
+
+        if (tpl == null || tpl.lines.isEmpty()) {
+            TextView empty = new TextView(this);
+            empty.setText("Нет строк в этом шаблоне");
+            empty.setTextColor(0xFFA78BFA);
+            empty.setTextSize(13f);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dpToPx(20), dpToPx(40), dpToPx(20), dpToPx(40));
+            contentContainer.addView(empty);
+        } else {
+            ScrollView scroll = new ScrollView(this);
+            scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+            LinearLayout list = new LinearLayout(this);
+            list.setOrientation(LinearLayout.VERTICAL);
+            list.setPadding(dpToPx(8), 0, dpToPx(8), dpToPx(8));
+            scroll.addView(list);
+
+            for (int i = 0; i < tpl.lines.size(); i++) {
+                final String line = tpl.lines.get(i);
+
+                Button btn = new Button(this);
+                String preview = line.length() > 60
+                        ? line.substring(0, 60) + "..."
+                        : line;
+                btn.setText((i + 1) + ". " + preview);
+                btn.setAllCaps(false);
+                btn.setTextColor(0xFFFFFFFF);
+                btn.setTextSize(13f);
+                btn.setBackgroundResource(R.drawable.key_bg);
+                LinearLayout.LayoutParams lp =
+                        new LinearLayout.LayoutParams(-1, dpToPx(50));
+                lp.bottomMargin = dpToPx(6);
+                btn.setLayoutParams(lp);
+                btn.setOnClickListener(v -> {
+                    InputConnection ic = getCurrentInputConnection();
+                    if (ic != null) {
+                        ic.commitText(line, 1);
+                    }
+                });
+                list.addView(btn);
+            }
+
+            contentContainer.addView(scroll);
+        }
+
+        // Назад к шаблонам
+        Button btnBack = new Button(this);
+        btnBack.setText("← Назад к шаблонам");
+        btnBack.setAllCaps(false);
+        btnBack.setTextColor(0xFFFFFFFF);
+        btnBack.setTextSize(14f);
+        btnBack.setBackgroundResource(R.drawable.key_bg);
+        LinearLayout.LayoutParams bLp =
+                new LinearLayout.LayoutParams(-1, dpToPx(44));
+        bLp.setMargins(dpToPx(8), dpToPx(6), dpToPx(8), dpToPx(6));
+        btnBack.setLayoutParams(bLp);
+        btnBack.setOnClickListener(v -> showTemplatesList());
+        contentContainer.addView(btnBack);
+    }
+
+    // ==================== ВСПОМОГАТЕЛЬНОЕ ====================
+
     private int dpToPx(float dp) {
-        return (int) android.util.TypedValue.applyDimension(
-                android.util.TypedValue.COMPLEX_UNIT_DIP, dp,
+        return (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, dp,
                 getResources().getDisplayMetrics());
     }
-          }
+                }
