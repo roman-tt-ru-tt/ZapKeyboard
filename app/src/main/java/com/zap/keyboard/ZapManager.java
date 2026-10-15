@@ -10,33 +10,46 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Хранилище шаблонов Zap. Формат: JSON-массив [{name, text}, ...]
+ * Хранилище шаблонов Zap.
+ * Формат: JSON-массив [{name, lines: [...]}, ...]
  */
 public final class ZapManager {
 
     private static final String PREFS = "ZapData";
-    private static final String KEY_ITEMS = "zap_items";
+    private static final String KEY_TEMPLATES = "zap_templates";
 
-    public static final class ZapItem {
+    /** Максимум строк в одном шаблоне. */
+    public static final int MAX_LINES_PER_TEMPLATE = 50;
+
+    public static final class ZapTemplate {
         public final String name;
-        public final String text;
+        public final List<String> lines;
 
-        public ZapItem(String name, String text) {
+        public ZapTemplate(String name, List<String> lines) {
             this.name = name;
-            this.text = text;
+            this.lines = lines != null ? lines : new ArrayList<>();
         }
 
         public JSONObject toJson() throws Exception {
             JSONObject o = new JSONObject();
             o.put("name", name);
-            o.put("text", text);
+            JSONArray arr = new JSONArray();
+            for (String line : lines) arr.put(line);
+            o.put("lines", arr);
             return o;
         }
 
-        public static ZapItem fromJson(JSONObject o) {
-            return new ZapItem(
-                    o.optString("name", ""),
-                    o.optString("text", ""));
+        public static ZapTemplate fromJson(JSONObject o) {
+            String name = o.optString("name", "");
+            List<String> lines = new ArrayList<>();
+            JSONArray arr = o.optJSONArray("lines");
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    String line = arr.optString(i, "");
+                    if (!line.isEmpty()) lines.add(line);
+                }
+            }
+            return new ZapTemplate(name, lines);
         }
     }
 
@@ -46,65 +59,160 @@ public final class ZapManager {
         return c.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
-    /** Получить все шаблоны. */
-    public static synchronized List<ZapItem> getAll(Context c) {
-        List<ZapItem> out = new ArrayList<>();
+    // ==================== ПОЛУЧИТЬ ВСЕ ШАБЛОНЫ ====================
+
+    public static synchronized List<ZapTemplate> getAll(Context c) {
+        List<ZapTemplate> out = new ArrayList<>();
         try {
-            String raw = prefs(c).getString(KEY_ITEMS, "[]");
+            String raw = prefs(c).getString(KEY_TEMPLATES, "[]");
             JSONArray arr = new JSONArray(raw);
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.optJSONObject(i);
-                if (o != null) out.add(ZapItem.fromJson(o));
+                if (o != null) out.add(ZapTemplate.fromJson(o));
             }
         } catch (Exception ignored) { }
         return out;
     }
 
-    /** Добавить шаблон. */
-    public static synchronized boolean add(Context c, String name, String text) {
-        if (name == null || name.trim().isEmpty()) return false;
-        if (text == null) text = "";
-        name = name.trim();
-        text = text.trim();
-
-        try {
-            List<ZapItem> list = getAll(c);
-            // Проверка на дубликат по имени
-            for (ZapItem item : list) {
-                if (item.name.equalsIgnoreCase(name)) return false;
-            }
-            list.add(0, new ZapItem(name, text));
-            save(c, list);
-            return true;
-        } catch (Exception e) {
-            return false;
+    /** Найти шаблон по имени. */
+    public static synchronized ZapTemplate findByName(Context c, String name) {
+        if (name == null) return null;
+        for (ZapTemplate t : getAll(c)) {
+            if (t.name.equals(name)) return t;
         }
+        return null;
+    }
+
+    // ==================== УПРАВЛЕНИЕ ШАБЛОНАМИ ====================
+
+    /** Создать новый шаблон. */
+    public static synchronized boolean addTemplate(Context c, String name) {
+        if (name == null || name.trim().isEmpty()) return false;
+        name = name.trim();
+
+        List<ZapTemplate> list = getAll(c);
+        for (ZapTemplate t : list) {
+            if (t.name.equalsIgnoreCase(name)) return false;
+        }
+        list.add(0, new ZapTemplate(name, new ArrayList<>()));
+        save(c, list);
+        return true;
     }
 
     /** Удалить шаблон по имени. */
-    public static synchronized boolean remove(Context c, String name) {
+    public static synchronized boolean removeTemplate(Context c, String name) {
         if (name == null) return false;
-        try {
-            List<ZapItem> list = getAll(c);
-            boolean removed = false;
-            for (int i = list.size() - 1; i >= 0; i--) {
-                if (list.get(i).name.equals(name)) {
-                    list.remove(i);
-                    removed = true;
-                }
+        List<ZapTemplate> list = getAll(c);
+        boolean removed = false;
+        for (int i = list.size() - 1; i >= 0; i--) {
+            if (list.get(i).name.equals(name)) {
+                list.remove(i);
+                removed = true;
             }
-            if (removed) save(c, list);
-            return removed;
-        } catch (Exception e) {
-            return false;
         }
+        if (removed) save(c, list);
+        return removed;
     }
 
-    private static void save(Context c, List<ZapItem> list) {
+    /** Переименовать шаблон. */
+    public static synchronized boolean renameTemplate(Context c,
+                                                      String oldName,
+                                                      String newName) {
+        if (oldName == null || newName == null) return false;
+        newName = newName.trim();
+        if (newName.isEmpty()) return false;
+
+        List<ZapTemplate> list = getAll(c);
+        // Проверка на дубликат
+        for (ZapTemplate t : list) {
+            if (!t.name.equals(oldName) && t.name.equalsIgnoreCase(newName)) return false;
+        }
+        boolean found = false;
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).name.equals(oldName)) {
+                list.set(i, new ZapTemplate(newName, list.get(i).lines));
+                found = true;
+                break;
+            }
+        }
+        if (found) save(c, list);
+        return found;
+    }
+
+    // ==================== УПРАВЛЕНИЕ СТРОКАМИ ====================
+
+    /** Добавить строку в шаблон. */
+    public static synchronized boolean addLine(Context c, String templateName, String line) {
+        if (templateName == null || line == null) return false;
+        line = line.trim();
+        if (line.isEmpty()) return false;
+
+        List<ZapTemplate> list = getAll(c);
+        for (int i = 0; i < list.size(); i++) {
+            ZapTemplate t = list.get(i);
+            if (t.name.equals(templateName)) {
+                if (t.lines.size() >= MAX_LINES_PER_TEMPLATE) return false;
+                List<String> newLines = new ArrayList<>(t.lines);
+                newLines.add(line);
+                list.set(i, new ZapTemplate(t.name, newLines));
+                save(c, list);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Удалить строку из шаблона по индексу. */
+    public static synchronized boolean removeLine(Context c,
+                                                  String templateName,
+                                                  int index) {
+        if (templateName == null) return false;
+        List<ZapTemplate> list = getAll(c);
+        for (int i = 0; i < list.size(); i++) {
+            ZapTemplate t = list.get(i);
+            if (t.name.equals(templateName)) {
+                if (index < 0 || index >= t.lines.size()) return false;
+                List<String> newLines = new ArrayList<>(t.lines);
+                newLines.remove(index);
+                list.set(i, new ZapTemplate(t.name, newLines));
+                save(c, list);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Заменить строку в шаблоне по индексу. */
+    public static synchronized boolean updateLine(Context c,
+                                                  String templateName,
+                                                  int index,
+                                                  String newText) {
+        if (templateName == null || newText == null) return false;
+        newText = newText.trim();
+        if (newText.isEmpty()) return false;
+
+        List<ZapTemplate> list = getAll(c);
+        for (int i = 0; i < list.size(); i++) {
+            ZapTemplate t = list.get(i);
+            if (t.name.equals(templateName)) {
+                if (index < 0 || index >= t.lines.size()) return false;
+                List<String> newLines = new ArrayList<>(t.lines);
+                newLines.set(index, newText);
+                list.set(i, new ZapTemplate(t.name, newLines));
+                save(c, list);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ==================== SAVE ====================
+
+    private static void save(Context c, List<ZapTemplate> list) {
         try {
             JSONArray arr = new JSONArray();
-            for (ZapItem item : list) arr.put(item.toJson());
-            prefs(c).edit().putString(KEY_ITEMS, arr.toString()).apply();
+            for (ZapTemplate t : list) arr.put(t.toJson());
+            prefs(c).edit().putString(KEY_TEMPLATES, arr.toString()).apply();
         } catch (Exception ignored) { }
     }
-              }
+                                                            }
